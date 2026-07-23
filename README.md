@@ -1,53 +1,71 @@
-# E-IMZO Integratsiya Qo'llanmasi — Web, Mobil va Backend
+# E-IMZO Integratsiya Qo'llanmasi — Web, Mobile va Backend
 
-> **Biz o'zimiz orzu qilgan amaliy qo'llanma.** E-IMZO'ning rasmiy hujjatlari qisqa va tarqoq: bir qismi GitHub repolarда, bir qismi JS demoda, bir qismi Java namunasida. Bu qo'llanma sizga haqiqatan kerak bo'lgan hamma narsani — tushunchalar, aniq kontraktlar, ishlaydigan kod, va bizni kunlab qiynagan xatoliklar — bir joyga to'playdi. Shunda siz E-IMZO'ni web, mobil va backend'ga qiynalmasdan ulaysiz.
+> Bu qo'llanma biz o'zimiz orzu qilgan hujjat. E-IMZO'ning rasmiy hujjatlari juda qisqa va bir necha [GitHub](https://github.com/qo0p/e-imzo-doc) repolari, JS demo va Java namunalari orasida tarqoq. Biz E-IMZO'ni real loyihaga ulaganda kunlab qiynaldik. Shu sababli hamma kerakli narsani — tushunchalar, aniq API kontraktlari, ishlaydigan kod va bizni eng ko'p aldab yurgan xatoliklar — bir joyga to'pladik. Maqsad: sizning integratsiyangiz bizникидан ancha oson o'tsin.
 >
-> **Kimlar uchun:** hamma daraja uchun. §0–§2 — hammaga (asosiy model + hamma xato qiladigan bitta narsa). §3–§7 — har bir yuza bo'yicha ulash qadamlari. §8 — xatolarni topish yo'riqnomasi. Oldindan GOST/kriptografiya bilimi shart emas.
+> Kimlar uchun: **hamma daraja uchun**. Agar siz junior bo'lsangiz — hech narsani oldindan bilishingiz shart emas, hammasi tushuntirilgan. Agar senior bo'lsangiz — to'g'ridan-to'g'ri kerakli bo'limga o'ting. GOST yoki kriptografiya bo'yicha bilim talab qilinmaydi.
+
+**Mundarija**
+
+1. [Eng avval o'qing — E-IMZO qanday ishlaydi](#1-eng-avval-oqing--e-imzo-qanday-ishlaydi)
+2. [Ishtirokchilar (qismlar)](#2-ishtirokchilar-qismlar)
+3. [Hash — O'z DSt 1106 (eng muhim bo'lim)](#3-hash--oz-dst-1106-eng-muhim-bolim)
+4. [e-imzo-server (verify serveri)](#4-e-imzo-server-verify-serveri)
+5. [Web integratsiya (browser)](#5-web-integratsiya-browser)
+6. [Mobile integratsiya (deep-link + callback)](#6-mobile-integratsiya-deep-link--callback)
+7. [Backend integratsiya](#7-backend-integratsiya)
+8. [SiteID va callback URL registratsiyasi](#8-siteid-va-callback-url-registratsiyasi)
+9. [Xatolarni topish jadvali](#9-xatolarni-topish-jadvali)
+10. [Manba kodlar va havolalar](#10-manba-kodlar-va-havolalar)
 
 ---
 
-## 0. Qisqacha (avval shuni o'qing)
+## 1. Eng avval o'qing — E-IMZO qanday ishlaydi
 
-**E-IMZO nima:** O'zbekistonning milliy elektron imzo tizimi (Soliq qo'mitasi). Foydalanuvchi o'zining **ID-kartasi** (yoki saqlangan kaliti) bilan imzolaydi, siz esa tekshirsa bo'ladigan **PKCS#7** imzoni olasiz.
+**E-IMZO nima?** Bu O'zbekistonning milliy elektron imzo tizimi (Soliq qo'mitasi tomonidan). Foydalanuvchi o'zining **ID-kartasi** yordamida hujjatni imzolaydi, va siz natijada tekshirsa bo'ladigan raqamli imzo — **PKCS#7** — olasiz.
 
-**Oltin qoida:** **imzoni siz o'zingiz yasamaysiz.** PKCS#7'ni E-IMZO yasaydi — brauzerда (lokal plagin orqali) yoki davlat mobil ilovasi ichida. Sizning vazifangiz faqat: (1) E-IMZO'ga hujjatning **hash**ini berish, va (2) u qaytargan PKCS#7'ni **tekshirish**.
+Bu yerda tushunib olish kerak bo'lgan eng asosiy g'oya bor, va u ko'pchilikning boshini qotiradi:
 
-**Uchta ulash yuzasi:**
+> **Imzoning o'zini siz yaratmaysiz.** PKCS#7 imzoni har doim E-IMZO yaratadi — yo browser ichidagi maxsus plugin orqali, yo davlatning mobile ilovasi ichida. Sizning ishingiz atigi ikki narsa: (1) E-IMZO'ga imzolanadigan hujjatning **hash**ini berish, va (2) u qaytargan PKCS#7'ni **verify qilish** (tekshirish).
 
-| Yuza | Imzoni kim yasaydi | Sizga qanday yetadi |
+Yaxshi taqqoslash: E-IMZO'ni "Google orqali kirish" yoki to'lov tizimining webhook'i kabi tasavvur qiling. Siz kriptografiyani o'zingiz yozmaysiz — ishni E-IMZO'ga topshirasiz, keyin natijaning haqiqiyligini tekshirasiz. Xavfsizlik "kim so'rov yubordi" degа emas, **"imzo matematik jihatdan to'g'rimi"** degа asoslanadi.
+
+E-IMZO'ni **uch xil usulда** ulash mumkin. Har biri imzoni boshqacha yo'l bilan yaratadi:
+
+| Usul | Imzoni kim yaratadi | Imzo sizga qanday yetib keladi |
 |---|---|---|
-| **Web** | E-IMZO brauzer plagini (lokal, `CAPIWS`) | JS PKCS#7'ni backend'ingizga POST qiladi |
-| **Mobil** | E-IMZO ID-Card Mobile ilovasi | E-IMZO serveri PKCS#7'ni sizning **callback URL**ingizga POST qiladi |
-| **Backend** | — (siz tekshirasiz) | Siz `{hujjat, pkcs7}`ni **e-imzo-server**ga tekshirish uchun yuborasiz |
+| **Web** (kompyuter browser'i) | E-IMZO browser plugin'i (kompyuterda lokal ishlaydi) | Sizning JavaScript kodingiz PKCS#7'ni backend'ingizga `POST` qiladi |
+| **Mobile** (telefon) | E-IMZO ID-Card Mobile ilovasi | E-IMZO'ning markaziy serveri PKCS#7'ni sizning **callback URL**ingizga `POST` qiladi |
+| **Backend** (server) | — (bu yerda siz faqat verify qilasiz) | Siz `{hujjat, pkcs7}`ni **e-imzo-server**ga yuborib, tekshirtirasiz |
 
-**Hamma xato qiladigan #1 narsa:** hash algoritmi. U — **O'z DSt 1106**, ya'ni **CryptoPro parametrlari bilan GOST R 34.11-94** — SHA-256 EMAS. Buni noto'g'ri qilsangiz, har bir imzo jimgina verify'dan o'tmaydi. §2'ni o'qing — bu eng muhim bo'lim.
+Amalda ko'pincha ikkalasi kerak bo'ladi: **web yoki mobile** imzoni oladi, **backend** esa uni verify qilib, bazaga saqlaydi.
 
----
-
-## 1. Qismlar
-
-- **ID-karta** — foydalanuvchining sertifikati + maxfiy kaliti turgan jismoniy smart-karta. Imzolash *karta ichida* bo'ladi (PIN + NFC/o'quvchi).
-- **E-IMZO brauzer plagini** — lokal ilova, WebSocket API (`CAPIWS`, `wss://127.0.0.1:64322`) ochadi; web sahifalar uni `e-imzoapi.js` orqali boshqaradi. Imzoni kompyuterда yasaydi.
-- **E-IMZO ID-Card Mobile ilovasi** — davlat mobil ilovasi. `eimzo://` deep-link orqali ochiladi, hashni ID-karta bilan imzolaydi va natijani E-IMZO markaziy serveriga beradi.
-- **e-imzo-server** — server tomonidagi komponent (masalan `host:8428` da ishlaydigan JAR). PKCS#7'larni **tekshiradi**, timestamp qo'shadi, va (mobil moduli yoqilgan bo'lsa) mobil oqimini boshqaradi. **Og'ir GOST kriptografiyasini sizning o'rningizga qiladigan yagona qism shu.**
-- **SiteID** — E-IMZO bergan, merchant-ID kabi identifikator. Mobil oqim uchun SiteID'ga **callback URL** registratsiya qilasiz.
-- **PKCS#7** — imzoning "muhrlangan konverti": kim imzolagan, sertifikati, kriptografik imzo. *Attached* (hujjat ichida) yoki *detached* (faqat imzo) bo'lishi mumkin.
-- **PINFL (ЖШШИР)** — imzolovchining milliy ID raqami, sertifikatдан olinadi — *aynan kerakli odam* imzolaganini tekshirish uchun ishlating.
-
-**Asosiy model:** E-IMZO'ni "Google bilan kirish" yoki to'lov webhook'i kabi tasavvur qiling. Kriptografiyani o'zingiz yozmaysiz; E-IMZO'ga topshirasiz va natijani tekshirasiz. Ishonch **matematikaga (imzo tekshiruvdan o'tishiga)** asoslanadi, kim chaqirganiga emas.
+> ⚠️ **Hammadan ko'p qiynaydigan narsa — hash algoritmi.** E-IMZO SHA-256 emas, **O'z DSt 1106** (bu — CryptoPro parametrli GOST R 34.11-94) ishlatadi. Agar algoritmni adashtirsangiz, hech qanday xato chiqmaydi — imzo shunchaki **jimgina verify'дан o'tmaydi**, va siz sababini soatlab qidirasiz. Shuning uchun [3-bo'lim](#3-hash--oz-dst-1106-eng-muhim-bolim) — eng muhimi.
 
 ---
 
-## 2. Hash — O'z DSt 1106 (sizni kunlardan qutqaradigan bo'lim)
+## 2. Ishtirokchilar (qismlar)
 
-Har bir imzo hujjatning **hash**i ustidan bo'ladi, butun fayl ustidan emas. E-IMZO **O'z DSt 1106:2009** ishlatadi. Eng muhim fakt:
+Integratsiyaга kirishishдан oldin, kim nima ish qilishini bilib oling:
 
-> **O'z DSt 1106 == CryptoPro parametrlari bilan GOST R 34.11-94 (S-box "D-A").**
-> Bu 256-bitli hash. U **SHA-256 emas**, va GOST "test" parametrlari to'plami ham **emas**.
+- **ID-karta** — foydalanuvchining jismoniy smart-kartasi. Uning ichida sertifikat va maxfiy kalit turadi. Imzolash aynan **karta ichida** sodir bo'ladi (PIN kod + NFC yoki karta o'quvchi orqali). Maxfiy kalit kartadan hech qachon chiqmaydi.
+- **E-IMZO browser plugin'i** — foydalanuvchi kompyuteriga o'rnatiladigan kichik dastur. U `wss://127.0.0.1:64322` manzilida WebSocket API (`CAPIWS`) ochadi, va sizning web sahifangiz uni [`e-imzoapi.js`](https://github.com/qo0p/e-imzo-doc) kutubxonasi orqali boshqaradi. Imzoni aynan shu plugin yaratadi.
+- **E-IMZO ID-Card Mobile ilovasi** — davlatning rasmiy mobile ilovasi. U sizning ilovangizdan `eimzo://` deep-link orqali ochiladi, hash'ni ID-karta bilan imzolaydi, va natijani E-IMZO'ning markaziy serveriga topshiradi.
+- **e-imzo-server** — server tomonda ishlaydigan komponent (odatda `host:8428` da ishlaydigan JAR fayl). Uning ishi: PKCS#7'larni **verify qilish**, timestamp qo'shish, va (mobile moduli yoqilgan bo'lsa) mobile jarayonini boshqarish. **Og'ir GOST kriptografiyasini sizning o'rningizga qiladigan yagona qism — shu.** Siz odatda uni o'zingiz server'ga o'rnatib qo'yasiz va backend'ingizni unga yo'naltirasiz.
+- **SiteID** — E-IMZO sizga beradigan identifikator (do'kon uchun "merchant ID"ga o'xshaydi). Mobile jarayonда siz SiteID uchun bitta **callback URL** registratsiya qilasiz.
+- **PKCS#7** — imzoning "muhrlangan konverti". Uning ichida: kim imzolagan, uning sertifikati, va kriptografik imzoning o'zi bor. Ikki turi bor: *attached* (hujjat konvert ichiga solingan) va *detached* (faqat imzo, hujjatсиз).
+- **PINFL (JSHSHIR)** — imzolovchining milliy ID raqami. U sertifikat ichidan olinadi. Siz undan **aynan kerakli odam imzolaganini** tekshirish uchun foydalanasiz.
 
-### 2.1 Java'da (backend) — BouncyCastle, ~5 qator
+---
 
-BouncyCastle'ning **default** `GOST3411Digest`i aynan shu parametrlar to'plami. Maxsus S-box shart emas:
+## 3. Hash — O'z DSt 1106 (eng muhim bo'lim)
+
+Har qanday imzo butun fayl ustidan emas, uning **hash**i (qisqa, o'zgarmas "barmoq izi") ustidan qo'yiladi. E-IMZO **O'z DSt 1106:2009** algoritmini ishlatadi. Mana eng muhim fakt, uni yaxshilab yodda tuting:
+
+> **O'z DSt 1106 — bu CryptoPro parametrli GOST R 34.11-94 (S-box "D-A") algoritmi.** Natija — 256-bitli hash. Bu **SHA-256 emas**, va GOST'ning "test" parametrlari ham **emas**.
+
+### 3.1 Java'da (backend) — BouncyCastle bilan atigi 5 qator
+
+Eng yaxshi yangilik: [BouncyCastle](https://www.bouncycastle.org/download/bouncy-castle-java/) kutubxonasining **default** `GOST3411Digest`i aynan shu algoritm. Hech qanday maxsus S-box sozlash shart emas:
 
 ```java
 import org.bouncycastle.crypto.digests.GOST3411Digest;
@@ -58,103 +76,104 @@ public static String ozDst1106Hex(byte[] input) {
     d.update(input, 0, input.length);
     byte[] out = new byte[d.getDigestSize()];     // 32 bayt
     d.doFinal(out, 0);
-    return HexFormat.of().formatHex(out);          // 64 hex belgi
+    return HexFormat.of().formatHex(out);          // 64 ta hex belgi
 }
 ```
 
-### 2.2 Har qanday implementatsiyani shu vektorlar bilan tekshiring
+### 3.2 Har qanday implementatsiyani shu vektorlar bilan tekshiring
 
-GOST implementatsiyasiga u shu **e'lon qilingan CryptoPro GOST R 34.11-94** test vektorlarини qaytarmaguncha ishonmang (O'z DSt 1106 bilan bir xil). Ularni unit-testga qo'ying:
+Qaysi tilда bo'lmasin, GOST implementatsiyangizga u quyidagi natijalarni bermaguncha ishonmang. Bular — hammaga ochiq, e'lon qilingan **CryptoPro GOST R 34.11-94 test vektorlari** (O'z DSt 1106 bilan bir xil). Ularni unit-test qilib qo'ying:
 
 ```
-""                                            -> 981e5f3ca30c841487830f84fb433e13ac1101569b9c13584ac483234cd656c0
-"a"                                           -> e74c52dd282183bf37af0079c9f78055715a103f17e3133ceff1aacf2f403011
-"abc"                                         -> b285056dbf18d7392d7677369524dd14747459ed8143997e163b2986f92fd42c
-"message digest"                              -> bc6041dd2aa401ebfa6e9886734174febdb4729aa972d60f549ac39b29721ba0
-"The quick brown fox jumps over the lazy dog" -> 9004294a361a508c586fe53d1f1b02746765e71b765472786e4770d565830a76
+hash("")                                             = 981e5f3ca30c841487830f84fb433e13ac1101569b9c13584ac483234cd656c0
+hash("a")                                            = e74c52dd282183bf37af0079c9f78055715a103f17e3133ceff1aacf2f403011
+hash("abc")                                          = b285056dbf18d7392d7677369524dd14747459ed8143997e163b2986f92fd42c
+hash("message digest")                               = bc6041dd2aa401ebfa6e9886734174febdb4729aa972d60f549ac39b29721ba0
+hash("The quick brown fox jumps over the lazy dog")  = 9004294a361a508c586fe53d1f1b02746765e71b765472786e4770d565830a76
 ```
 
-Agar `hash("")` sizда `981e5f3c…` bo'lsa — algoritm to'g'ri. Boshqa narsa bo'lsa (masalan GOST *test* to'plami `ce85b99c…` beradi) — u E-IMZO bilan **verify'dan o'tmaydi**.
+Agar sizning `hash("")` natijangiz `981e5f3c…` bo'lsa — algoritm to'g'ri. Agar boshqacha bo'lsa (masalan, GOST'ning *test* to'plami `ce85b99c…` beradi), u E-IMZO bilan **hech qachon verify'дан o'tmaydi**.
 
-### 2.3 Flutter/Dart va JavaScript'da (client)
+### 3.3 Flutter/Dart va JavaScript'da (client tomonda)
 
-- **Dart/Flutter:** `github.com/jafar260698/E-IMZO-INTEGRATION` → `lib/crypto/` dagi tayyor `gost_hash.dart` (klass `GostHash`, `OzDSt1106Digest`, S-box `"D_A"`). Shu papkani ko'chirib oling.
-- **JavaScript (web):** E-IMZO'ning o'z demosidagi `e-imzo-mobile.js` ichidagi `gosthash()`.
+- **Dart/Flutter:** tayyor va ishlaydigan kod [jafar260698/E-IMZO-INTEGRATION](https://github.com/jafar260698/E-IMZO-INTEGRATION) repositoriyasining [`lib/crypto/`](https://github.com/jafar260698/E-IMZO-INTEGRATION/tree/dev/lib/crypto) papkasida (klass `GostHash`, `OzDSt1106Digest`, S-box `"D_A"`). Shu papkani o'z loyihangizga ko'chirib oling, o'zingiz GOST yozib o'tirmang.
+- **JavaScript (web):** E-IMZO'ning o'z demosidagi [`e-imzo-mobile.js`](https://test.e-imzo.uz/demo/eimzoidcard/js/e-imzo-mobile.js) fayli ichidagi `gosthash()` funksiyasi.
 
-### 2.4 Hashni kim hisoblaydi — va bayt-aniqlik tuzog'i
+### 3.4 Hash'ni kim hisoblaydi — va bir muhim tuzoq
 
-Hashni **client** (web plagini / mobil SDK) ham, sizning **backend**ingiz ham hisoblashi mumkin — hujjat kimда bo'lsa. Ikkalasi ham to'g'ri. Yagona qat'iy qoida:
+Hash'ni **client** (web plugin yoki mobile SDK) ham, sizning **backend**ingiz ham hisoblashi mumkin — hujjat kimda bo'lsa, o'sha hisoblaydi. Ikkala yo'l ham to'g'ri. Faqat bitta qat'iy qoida bor:
 
-> **Verify aynan qaysi baytlarни qayta hashlasa, o'sha baytlarни hashlang.** Detached PKCS#7 uchun e-imzo-server keyin siz yuborgan *hujjat baytlarini* qayta hashlaydi. Demak **xom hujjat baytlarини** hashlang, ularning base64 satrini emas. Base64 matnni (dekod qilingan baytlar o'rniga) hashlash — klassik jim xatolik.
+> **verify aynan qaysi baytlarni qayta hashlasa, siz ham aynan o'sha baytlarni hashlashingiz kerak.** Detached PKCS#7 uchun e-imzo-server keyinchalik siz yuborgan *hujjat baytlarini* qayta hashlaydi. Demak, siz ham **xom hujjat baytlarini** (raw bytes) hashlashingiz kerak, ularning base64 satrini emas. Base64 matnni (dekod qilingan baytlar o'rniga) hashlash — juda ko'p uchraydigan, jimgina xatolik.
 
-Server-markazли dizayn uchun (hujjat backend'да) hashni backend'да hisoblash eng oddiy va payload'ни kichik saqlaydi — butun fayl o'rniga 64-belgili `hashHex` qaytarasiz.
+Agar sizning arxitekturangiz server tomonда bo'lsa (hujjat backend'да tursa), hash'ni backend'да hisoblash eng oson yo'l: shunда ilovaga butun faylni emas, atigi 64 belgili `hashHex` string qaytarasiz — bu trafik uchun ham yengil.
 
 ---
 
-## 3. e-imzo-server (tekshirish serveri)
+## 4. e-imzo-server (verify serveri)
 
-Bu asosiy ishchi qism. Odatda uni o'zingiz ishlatasiz (JAR) va backend'ingizni unga yo'naltirasiz.
+Bu — integratsiyaning ishchi yuragi. Odatda siz uni o'zingiz server'ingizga o'rnatasiz.
 
-**Tekshirish va timestamp endpointlari (doim mavjud):**
+**Verify va timestamp uchun endpoint'lar (bular doim mavjud):**
 
-| Endpoint | Vazifasi |
+| Endpoint | Nima qiladi |
 |---|---|
-| `POST /backend/pkcs7/verify/attached` | *Attached* PKCS#7'ni tekshirish (hujjat ichida) |
-| `POST /backend/pkcs7/verify/detached` | *Detached* PKCS#7'ni `{documentBase64, pkcs7}`ga tekshirish — **server O'z DSt 1106'ni o'zi hisoblaydi** va imzoni tekshiradi |
-| `POST /backend/timestamp/...` | RFC-3161 timestamp qo'shish |
+| `POST /backend/pkcs7/verify/attached` | *Attached* PKCS#7'ni verify qiladi (hujjat konvert ichida) |
+| `POST /backend/pkcs7/verify/detached` | *Detached* PKCS#7'ni `{documentBase64, pkcs7}`ga qarab verify qiladi — **server O'z DSt 1106'ni o'zi hisoblab**, imzo shu hash'ga to'g'ri kelishini tekshiradi |
+| `POST /backend/timestamp/...` | RFC-3161 timestamp qo'shadi |
 
-**Mobil-modul endpointlari (faqat mobil modul yoqilgan + sozlangan bo'lsa):**
+**Mobile moduli endpoint'lari (bular faqat mobile moduli yoqilgan va sozlangan bo'lsa ishlaydi):**
 
-| Endpoint | Vazifasi |
+| Endpoint | Nima qiladi |
 |---|---|
-| `POST /frontend/mobile/auth` | Mobil **login**ни boshlash; imzolash uchun tasodifiy `challange` qaytaradi |
-| `POST /frontend/mobile/sign` | Mobil **sign** sessiyasini ochish; `{status, siteId, documentId}` qaytaradi — **body olmaydi va hash QAYTARMAYDI** (faqat documentId ajratgich) |
-| `POST /frontend/mobile/status` | Sessiyani form param `documentId` orqali so'rash (`1`=tayyor, `2`=kutilmoqda) |
-| `POST /frontend/mobile/upload` | E-IMZO PKCS#7'ni post qiladigan joy (callback e-imzo-server'ga registratsiya qilingan bo'lsa) |
-| `GET /backend/mobile/authenticate/{documentId}` | Tekshirilgan **auth** natijasini olish |
-| `POST /backend/mobile/verify` | Tekshirilgan **sign** natijasini olish |
+| `POST /frontend/mobile/auth` | Mobile orqali **login**ни boshlaydi; imzolash uchun tasodifiy `challange` qaytaradi |
+| `POST /frontend/mobile/sign` | Mobile **imzo** session'ini ochadi; `{status, siteId, documentId}` qaytaradi. **Diqqat: u body qabul qilmaydi va hash qaytarmaydi** — bu shunchaki `documentId` beruvchi (allocator) |
+| `POST /frontend/mobile/status` | Session holatini `documentId` (form param) orqali so'raydi (`1`=tayyor, `2`=kutilmoqda) |
+| `POST /frontend/mobile/upload` | E-IMZO PKCS#7'ni shu yerga `POST` qiladi (agar callback e-imzo-server'ga registratsiya qilingan bo'lsa) |
+| `GET /backend/mobile/authenticate/{documentId}` | Tekshirilgan **login** natijasini oladi |
+| `POST /backend/mobile/verify` | Tekshirilgan **imzo** natijasini oladi |
 
-**Bizni vaqt yo'qotgan ikki fakt:**
+**Bizni ancha vaqt yo'qotgan ikkita fakt:**
 
-1. **Hash endpointi yo'q.** `/frontend/mobile/sign` hujjat *olmaydi* va hash *qaytarmaydi* — u faqat qisqa `documentId` chiqaradi. O'z DSt 1106 hashini siz (client yoki backend) o'zingiz hisoblashingiz kerak (§2).
-2. **Mobil modul umuman bo'lmasligi mumkin.** Yangi e-imzo-server build'i ko'pincha faqat verify endpointlarини beradi; mobil modul yoqilib, `mobile.siteId` sozlanmaguncha `/frontend/mobile/*` `404` qaytaradi. Agar mobil sessiyalaringiz hech qachon tugamasa — avval shu endpointlarni zondlang.
-
----
-
-## 4. Web integratsiya (brauzer)
-
-Desktop/web oqim **E-IMZO brauzer plagini**dan foydalanadi — deep-link ham, server callback ham yo'q.
-
-**Oqim:**
-
-1. `e-imzoapi.js`ni yuklang; u lokal plagin bilan `CAPIWS` (`wss://127.0.0.1:64322`) orqali gaplashadi.
-2. Foydalanuvchi sertifikatlarини ro'yxatlang (`CAPIWS.apikey` → `listAllUserKeys`); foydalanuvchi bittasini tanlaydi.
-3. Kalitni yuklang, so'ng PKCS#7'ni **brauzer ichida** yasang — plagin hujjatni hashlaydi (O'z DSt 1106) va imzolaydi. Siz base64 PKCS#7 (attached yoki detached) olasiz.
-4. PKCS#7'ni (detached bo'lsa hujjat bilan) **backend'ingizga** `POST` qiling.
-5. Backend uni e-imzo-server orqali **tekshiradi** (`/backend/pkcs7/verify/{attached,detached}`), PINFL'ni tekshiradi va imzo yozuvini saqlaydi.
-
-**Muhim nuqtalar:**
-- **Plagin** hashni hisoblaydi va imzoni yasaydi — sizning JS'ingiz GOST'ga tegmaydi.
-- Backend'ingizning vazifasi mobil oqimning verify qadami bilan bir xil (§6) — o'sha `verify/detached` chaqiruvi. Shu kodni umumiy qiling.
-- Namuna: E-IMZO'ning `e-imzoapi.js` / `e-imzo-client.js` demosi va `qo0p/e-imzo-doc`.
+1. **Hash uchun alohida endpoint yo'q.** `/frontend/mobile/sign` sizdan hujjat olmaydi va sizga hash qaytarmaydi — u faqat qisqa `documentId` beradi. O'z DSt 1106 hash'ini baribir siz (client yoki backend) o'zingiz hisoblashingiz kerak ([3-bo'lim](#3-hash--oz-dst-1106-eng-muhim-bolim)).
+2. **Mobile moduli umuman bo'lmasligi mumkin.** Yangi o'rnatilgan e-imzo-server ko'pincha faqat verify endpoint'larini beradi; mobile moduli yoqilib, `mobile.siteId` sozlanmaguncha `/frontend/mobile/*` yo'llari `404` qaytaradi. Agar mobile session'laringiz hech qachon tugamayotgan bo'lsa — birinchi bo'lib shu endpoint'larni `curl` bilan tekshirib ko'ring.
 
 ---
 
-## 5. Mobil integratsiya — E-IMZO ID-Card Mobile (deep-link + callback)
+## 5. Web integratsiya (browser)
 
-Telefonда sizning kodingiz boshqaradigan lokal plagin yo'q, shuning uchun mobil oqim **server-markazли**: backend'ingiz hashni tayyorlaydi, telefon E-IMZO ilovasiga deep-link orqali kiradi va uni imzolaydi, so'ng **E-IMZO markaziy serveri tayyor PKCS#7'ni sizning callback URL'ingizga qaytaradi**.
+Kompyuter/browser jarayoni **E-IMZO browser plugin'i** orqali ishlaydi. Bu yerda deep-link ham, server callback ham yo'q.
+
+Jarayon quyidagicha:
+
+1. Web sahifangizga [`e-imzoapi.js`](https://github.com/qo0p/e-imzo-doc)ni yuklaysiz. U kompyuterdagi plugin bilan `CAPIWS` (`wss://127.0.0.1:64322`) orqali bog'lanadi.
+2. Foydalanuvchining sertifikatlari ro'yxatini olasiz (`listAllUserKeys`), foydalanuvchi ulardan birini tanlaydi.
+3. Tanlangan kalitni yuklaysiz, so'ng PKCS#7'ni **plugin ichida** yaratasiz. Plugin hujjatni O'z DSt 1106 bilan hashlaydi va imzolaydi. Natijada base64 formatдаги PKCS#7 (attached yoki detached) olasiz.
+4. Bu PKCS#7'ni (detached bo'lsa, hujjat bilan birga) **backend'ingizga** `POST` qilasiz.
+5. Backend uni e-imzo-server orqali **verify qiladi** (`/backend/pkcs7/verify/...`), PINFL'ni tekshiradi, va imzoni bazaga saqlaydi.
+
+Muhim jihatlar:
+
+- Hash'ni ham, imzoni ham **plugin** yaratadi — sizning JavaScript kodingiz GOST'ga umuman tegmaydi.
+- Backend'ning bu yerdagi vazifasi mobile jarayonidagi verify qadamiga aynan bir xil ([7-bo'lim](#7-backend-integratsiya)) — o'sha `verify/detached` chaqiruvi. Shu kodni ikkala jarayon uchun umumiy qilib yozing.
+- Namuna kodlar: [qo0p/e-imzo-doc](https://github.com/qo0p/e-imzo-doc) va E-IMZO'ning `e-imzoapi.js` / `e-imzo-client.js` demolari.
+
+---
+
+## 6. Mobile integratsiya (deep-link + callback)
+
+Telefonда sizning kodingiz boshqaradigan lokal plugin yo'q. Shuning uchun mobile jarayoni **server tomonда** quriladi: backend hash'ni tayyorlaydi, telefon E-IMZO ilovasiga deep-link orqali o'tib imzolaydi, va **E-IMZO'ning markaziy serveri tayyor PKCS#7'ni sizning callback URL'ingizga qaytaradi**.
 
 ```
-Mobil ilova         Sizning backend      E-IMZO ilova (tel)     E-IMZO markaz
+Mobile ilova        Sizning backend      E-IMZO ilova (tel)     E-IMZO markaz
     | session ochish     |                     |                     |
-    |------------------->| documentId ajratadi |                     |
+    |------------------->| documentId oladi    |                     |
     |                    |  + O'z DSt 1106 hash |                     |
     |<-- siteId,         |                     |                     |
     |    documentId,     |                     |                     |
     |    hashHex --------|                     |                     |
     | deep-link quradi   |                     |                     |
     |------------------- eimzo://sign?qc=... ->|                     |
-    |                    |            [PIN + NFC, hashni imzolaydi]   |
+    |                    |            [PIN + NFC, hash imzolanadi]    |
     |                    |                     |-- PKCS#7 ---------->|
     |                    |<===== callback: POST /sizning/upload ======|  (server-to-server)
     |                    |  verify + PINFL -> saqlash                 |
@@ -162,67 +181,69 @@ Mobil ilova         Sizning backend      E-IMZO ilova (tel)     E-IMZO markaz
     |<-- SIGNED ---------|                     |                     |
 ```
 
-### 5.1 Qadam-baqadam
+### 6.1 Qadamlar
 
-1. **Ilova → backend:** "shu hujjat uchun imzo sessiyasi och" (foydalanuvchi tokeni bilan).
-2. **Backend:** huquqlarни tekshiradi; e-imzo-server `POST /frontend/mobile/sign` orqali `documentId` ajratadi; hujjat baytlarining **O'z DSt 1106 hash**ini hisoblaydi; `{siteId, documentId, hashHex}` qaytaradi.
-3. **Ilova:** deep-link quradi va ochadi (5.2'ga qarang).
-4. **Foydalanuvchi:** PIN + ID-kartani tegizadi (NFC). E-IMZO ilovasi PKCS#7 yasaydi.
-5. **E-IMZO markaz → backend:** PKCS#7'ni SiteID'ingizga registratsiya qilingan callback URL'ga post qiladi (5.3'ga qarang). Server-to-server, **token yo'q**.
-6. **Backend:** PKCS#7'ni (e-imzo-server orqali) o'sha hujjat baytlariga tekshiradi + PINFL'ni tekshiradi → saqlaydi (yoki FAILED belgilaydi).
-7. **Ilova:** status endpointini `SIGNED` / `FAILED` bo'lguncha so'raydi.
+1. **Ilova → backend:** ilova "shu hujjat uchun imzo session'ini och" deb so'raydi (foydalanuvchining login token'i bilan).
+2. **Backend:** avval foydalanuvchining huquqlarini tekshiradi. So'ng e-imzo-server'dan `POST /frontend/mobile/sign` orqali `documentId` oladi. Keyin hujjat baytlarining **O'z DSt 1106 hash**ini hisoblaydi. Va ilovaga `{siteId, documentId, hashHex}` qaytaradi.
+3. **Ilova:** shu ma'lumotlardan deep-link quradi va uni ochadi (formati pastда, 6.2).
+4. **Foydalanuvchi:** E-IMZO ilovasida PIN kodini kiritadi va ID-kartani NFC bilan tegizadi. E-IMZO ilovasi PKCS#7 imzoni yaratadi.
+5. **E-IMZO markaz → backend:** PKCS#7'ni sizning SiteID'ingizga registratsiya qilingan callback URL'ga `POST` qiladi. Bu server-to-server so'rov, **login token'siz** keladi (6.3).
+6. **Backend:** kelgan PKCS#7'ni (e-imzo-server orqali) o'sha hujjat baytlariga qarab verify qiladi va PINFL'ni tekshiradi. To'g'ri bo'lsa — imzoni saqlaydi; noto'g'ri bo'lsa — FAILED deb belgilaydi.
+7. **Ilova:** bu vaqt ichida status endpoint'ini `SIGNED` yoki `FAILED` chiqmaguncha qayta-qayta so'rab turadi (polling).
 
-### 5.2 Deep-link formati
+### 6.2 Deep-link formati
 
 ```
 eimzo://sign?qc=<siteId><documentId><hashHex><crc32>
 ```
 
-`qc` — bitta birlashtirilgan satr; oxiriga `crc32 = CRC32(siteId + documentId + hashHex)` qo'shiladi. Dart'da (referencedан), backend allaqachon `hashHex` bergan deb faraz qilsak:
+`qc` — bu bitta uzun string bo'lib, u `siteId`, `documentId`, `hashHex` va `crc32`ning ketma-ket ulanишидан hosil bo'ladi. Bu yerda `crc32 = CRC32(siteId + documentId + hashHex)` bo'lib, u stringning oxiriga qo'shiladi.
+
+Backend allaqachon `hashHex` bergan bo'lsa, Dart'da (reference kodдан):
 
 ```dart
-String code = siteId + documentId + hashHex;      // hashHex — backenddan
-code += Crc32.calcHex(code);                        // faqat CRC32 client-side (crc32.dart)
+String code = siteId + documentId + hashHex;      // hashHex — backend'dan keladi
+code += Crc32.calcHex(code);                        // faqat CRC32 client tomonда (crc32.dart)
 final deepLink = 'eimzo://sign?qc=$code';
 await launchUrl(Uri.parse(deepLink), mode: LaunchMode.externalApplication);
 ```
 
-Agar backend `hashHex` yubormasa (client-hisoblaydi dizayni), avval hujjat baytlaridan `gost_hash.dart` bilan hisoblang (§2.3) — **dekod qilingan** baytlar ustidan, hech qachon base64 satr ustidan emas.
+Agar backend `hashHex` yubormasa (client hisoblaydigan dizayn), avval hujjat baytlaridan [`gost_hash.dart`](https://github.com/jafar260698/E-IMZO-INTEGRATION/tree/dev/lib/crypto) bilan hash'ni hisoblang (3.3) — yana bir bor eslatamiz: **dekod qilingan xom baytlar** ustidan, hech qachon base64 string ustidan emas.
 
-### 5.3 Callback kontrakti (mobil oqimning katta tuzog'i)
+### 6.3 Callback kontrakti (mobile jarayonining eng katta tuzog'i)
 
-E-IMZO markaz PKCS#7'ni SiteID'ingizga registratsiya qilingan URL'ga **`application/x-www-form-urlencoded`** sifatida post qiladi. Maydon nomlari — **haqiqiy prod callback'дан tasdiqlangan**:
+E-IMZO markaz PKCS#7'ni SiteID'ingizga registratsiya qilingan URL'ga **`application/x-www-form-urlencoded`** formatда `POST` qiladi. Maydon (field) nomlari quyidagicha — bularni biz **haqiqiy production callback'дан** ko'rib, tasdiqladik:
 
-| Maydon | Ma'nosi |
+| Field nomi | Ma'nosi |
 |---|---|
-| `document_id` | siz ajratgan sessiya id'si |
-| **`pkcs7_b64`** | detached PKCS#7, base64 — **`pkcs7` nomli maydon EMAS** |
-| `serial_number` | imzolovchi sertifikat seriyasi |
-| `x_real_ip` | E-IMZO ko'rgan imzolovchi IP'si |
+| `document_id` | siz bergan session id'si |
+| **`pkcs7_b64`** | detached PKCS#7 imzo, base64 formatда — **e'tibor bering, `pkcs7` emas!** |
+| `serial_number` | imzolovchi sertifikatining seriya raqami |
+| `x_real_ip` | E-IMZO ko'rgan imzolovchining IP manzili |
 
-> **Bu bizni qattiq qiynadi.** Biz `pkcs7` nomli param o'qidik va bo'sh oldik → har bir callback'да `400` → sessiyalar mangu "PENDING"да qoldi, hash ham, URL registratsiyasi ham to'g'ri bo'lsa-da. **`pkcs7_b64` o'qing.** Shubha bo'lsa, birinchi haqiqiy callback'да butun payload'ни log qiling (`request.getParameterMap().keySet()`) va haqiqiy nomlarни o'qing.
+> **Aynan shu bizni juda qattiq qiynadi.** Biz `pkcs7` degan field'ni o'qidik, u bo'sh chiqdi, va har bir callback `400` bilan rad etildi. Natijada session'lar hash ham, URL registratsiyasi ham to'g'ri bo'lsa-da, mangu "PENDING"да qolib ketaverdi. **Yechim: `pkcs7_b64` field'ini o'qing.** Umuman, birinchi haqiqiy callback kelganда butun `POST` body'sini log qiling (masalan, `request.getParameterMap().keySet()`) va E-IMZO aslida qanday nomlar yuborayotganini o'z ko'zingiz bilan ko'ring.
 
-### 5.4 Ilova PKCS#7'ga hech qachon tegmaydi
+### 6.4 Mobile ilova PKCS#7'ga umuman tegmaydi
 
-Mobil ilova faqat: sessiya ochadi, deep-link quradi, statusни so'raydi. PKCS#7 E-IMZO-ilova → E-IMZO-markaz → backend yo'lidан boradi. Ilova uni hech qachon yuklamaydi.
+Ilovaning ishi faqat uchta: session ochish, deep-link qurib ochish, va status'ni polling qilish. PKCS#7 imzo E-IMZO-ilova → E-IMZO-markaz → sizning backend yo'li bilan boradi. Ilova uni hech qachon o'zi yuklamaydi. Bu — dizaynning muhim jihati.
 
 ---
 
-## 6. Backend integratsiya
+## 7. Backend integratsiya
 
-### 6.1 Siz ochadigan endpointlar
+### 7.1 Siz ochadigan endpoint'lar
 
-| Metod & yo'l (namuna) | Auth | Vazifasi |
+| Metod va yo'l (namuna) | Auth | Nima qiladi |
 |---|---|---|
-| `POST /api/v1/mobile/documents/{id}/sign/session` | foydalanuvchi tokeni | sessiya ochish → `{siteId, documentId, hashHex, expiresAt}` |
-| `GET  /api/v1/mobile/sign/session/{documentId}` | foydalanuvchi tokeni | so'rash → `{status, signedAt, errorCode}` |
-| `POST /api/v1/mobile/sign/upload` | **permitAll** | E-IMZO callback'i (§5.3) |
+| `POST /api/v1/mobile/documents/{id}/sign/session` | foydalanuvchi token'i | session ochadi → `{siteId, documentId, hashHex, expiresAt}` |
+| `GET  /api/v1/mobile/sign/session/{documentId}` | foydalanuvchi token'i | status so'raydi → `{status, signedAt, errorCode}` |
+| `POST /api/v1/mobile/sign/upload` | **permitAll** (ochiq) | E-IMZO callback'i (6.3) |
 
-Sessiya holati **Redis**'ga juda mos tushadi (status + TTL + bir martalik lock — takroriy callback ikki marta ishlamasin). Sessiya uchun yangi DB jadval shart emas; doimiy imzoni odatdagi verify+saqlash yo'lingiz yozadi.
+Session holatini saqlash uchun **Redis** juda qulay: status + TTL (muddat) + bitta bir martalik lock (takroriy callback ikki marta ishlab ketmasligi uchun). Session uchun alohida bazа jadvali kerak emas; doimiy imzoni sizning oddiy verify+saqlash kodingiz yozadi.
 
-### 6.2 PKCS#7'ni tekshiring (web + mobil uchun umumiy)
+### 7.2 PKCS#7'ni verify qilish (web va mobile uchun umumiy)
 
-Hujjat baytlari + PKCS#7'ni e-imzo-server'ga yuboring; u O'z DSt 1106'ni hisoblaydi va imzoni tekshiradi. So'ng imzolovchini tekshiring:
+Hujjat baytlari va PKCS#7'ni e-imzo-server'ga yuboring — u O'z DSt 1106'ni hisoblab, imzoni tekshiradi. So'ng imzolovchini tekshiring:
 
 ```
 resp = eimzoServer.verifyDetached(base64(documentBytes), pkcs7, realIp, host);
@@ -232,9 +253,9 @@ if (!pinflOf(resp.signer).equals(expectedPinfl)) reject("noto'g'ri imzolovchi");
 persistSignature(resp);
 ```
 
-**Detached** bloklar uchun server kontent↔imzo mosligini o'zi tekshiradi (mos kelmasa `verified() == false` bo'ladi). Agar hujjatning SHA-256'ini saqlasangiz — u faqat evidence uchun barmoq izi, imzolash hashi **emas**.
+*Detached* imzolar uchun server hujjat va imzo bir-biriga mos kelishini o'zi tekshiradi (mos kelmasa, `verified()` `false` bo'ladi). Agar siz hujjatning SHA-256'ini saqlab qo'ysangiz — u faqat log/evidence uchun barmoq izi, imzolash hash'i **emas**. Adashtirmang.
 
-### 6.3 Callback handler (to'g'ri maydonlarni o'qing)
+### 7.3 Callback handler (to'g'ri field'larni o'qing)
 
 ```java
 @PostMapping("/upload")   // permitAll
@@ -243,83 +264,60 @@ public StatusResponse upload(HttpServletRequest req) {
     String pkcs7      = firstNonBlank(req.getParameter("pkcs7_b64"), req.getParameter("pkcs7")); // pkcs7_b64!
     if (documentId == null || pkcs7 == null || pkcs7.isBlank())
         throw badRequest("document_id/pkcs7 yo'q");
-    // Evidence IP: SERVER aniqlagan IP'ni ishlating, foydalanuvchi yuborgan x_real_ip form param'ni emas —
-    // bu endpoint permitAll, shuning uchun client maydoni soxtalashtiriladi.
+    // Evidence uchun IP'ni SERVER o'zi aniqlaydi, foydalanuvchi yuborgan x_real_ip field'idan olmaydi:
+    // bu endpoint permitAll (ochiq), shuning uchun client yuborgan field'ni soxtalashtirish oson.
     return service.completeUpload(documentId, pkcs7, ClientIpResolver.resolve(req));
 }
 ```
 
-### 6.4 Xavfsizlik modeli (ochiq callback nega xavfsiz)
+### 7.4 Xavfsizlik modeli (ochiq callback nega xavfsiz)
 
-Callback `permitAll`, chunki **E-IMZO token olib yurmaydi**. Xavfsizlik IP allow-list'ga tayanmaydi. U quyidagilarga asoslanadi:
+Callback `permitAll` (hammaga ochiq), chunki **E-IMZO login token olib yurmaydi**. Xavfsizlik IP allow-list'ga ham tayanmaydi. U quyidagi uch narsaga asoslanadi:
 
-1. **Taxmin qilib bo'lmaydigan sessiya id'si** — `documentId` bitta imzoni chegaralaydi.
-2. **Kriptografik tekshiruv** — soxta/o'zgartirilgan PKCS#7 `verifyDetached`'дан o'tmaydi va **hech narsa saqlanmaydi**.
-3. **PINFL darvozasi** — sertifikatning milliy ID'si kutilgan imzolovchiga mos kelishi shart.
+1. **Taxmin qilib bo'lmaydigan session id** — `documentId` tasodifiy, va u faqat bitta imzoga tegishli.
+2. **Kriptografik verify** — soxta yoki o'zgartirilgan PKCS#7 `verifyDetached`'дан o'tmaydi, va natijada **hech narsa saqlanmaydi**.
+3. **PINFL tekshiruvi** — sertifikatдаги milliy ID kutilgan imzolovchiga mos kelishi shart.
 
-Xulosa: **foydalanuvchi yuborgan maydonlarга** (masalan `x_real_ip`) evidence sifatida saqlanadigan hech narsada **ishonmang** — `permitAll` endpointga har kim POST qila oladi. Server aniqlagan qiymatlarни ishlating.
-
----
-
-## 7. SiteID registratsiyasi
-
-- E-IMZO'дан **SiteID** oling (shartnoma asosida).
-- O'sha SiteID uchun E-IMZO'ga **callback (UPLOAD) URL**ingizni registratsiya qiling — E-IMZO markaz PKCS#7'ni shu yerga post qiladi. Bu E-IMZO tomonidagi *tashqi* registratsiya, sizning kodingizда emas.
-- e-imzo-server'ingizning mobil modulини o'sha `mobile.siteId` bilan sozlang va yoqing.
-- Callback URL E-IMZO'дан yetib boradigan (ochiq HTTPS) va siz registratsiya qilgan bilan aynan bir xil bo'lishi kerak.
-
-Agar E-IMZO callback'i umuman kelmasa (log'да `/upload` urilmalari yo'q) — SiteID→URL registratsiyasi noto'g'ri yoki yo'q. Agar kelsa-yu 400 bersa — maydon nomi masalasi (§5.3).
+Muhim xulosa: **client yuborgan biror field'ga** (masalan, `x_real_ip`) evidence sifatida ishonmang. `permitAll` endpoint'ga har kim `POST` qila oladi, demak client yuborgan har qanday qiymatni soxtalashtirish mumkin. Har doim server o'zi aniqlagan qiymatlarni ishlating. (Biz aynan shu xatoni bir marta qildik, security review tuzatib berdi.)
 
 ---
 
-## 8. Xatolarni topish yo'riqnomasi — belgi → sabab
+## 8. SiteID va callback URL registratsiyasi
 
-| Belgi | Ehtimoliy sabab | Yechim |
+- E-IMZO'дан **SiteID** oling (shartnoma asosida beriladi).
+- O'sha SiteID uchun E-IMZO'ga o'zingizning **callback (UPLOAD) URL**ingizni registratsiya qildiring — E-IMZO markaz PKCS#7'ni aynan shu manzilga yuboradi. Bu registratsiya E-IMZO tomonда qilinadi, sizning kodingizда emas.
+- e-imzo-server'ingizning mobile modulini o'sha `mobile.siteId` bilan sozlang va yoqing.
+- Callback URL E-IMZO'дан yetib boradigan ochiq HTTPS manzil bo'lishi, va siz registratsiya qilgan manzil bilan **aynan bir xil** bo'lishi kerak.
+
+Diagnostika uchun oddiy qoida: agar E-IMZO callback'i log'да umuman ko'rinmasa (`/upload` ga hech qanday so'rov kelmasa) — demak SiteID→URL registratsiyasi noto'g'ri yoki yo'q. Agar so'rov kelsa-yu `400` qaytsa — demak field nomida muammo (6.3).
+
+---
+
+## 9. Xatolarni topish jadvali
+
+| Belgi (symptom) | Ehtimoliy sabab | Yechim |
 |---|---|---|
-| Imzo **hech qachon verify'dan o'tmaydi** | Noto'g'ri hash algoritmi (SHA-256 yoki GOST *test* to'plami) | O'z DSt 1106 = CryptoPro GOST R 34.11-94 ishlating; §2.2 vektorlari bilan tekshiring |
-| Faqat ba'zi hujjatlar verify bo'lmaydi | Dekod baytlar o'rniga **base64 satr** hashlangan | Xom hujjat baytlarини hashlang |
-| Mobil sessiya **mangu PENDING**, log'да `/upload` yo'q | Callback URL registratsiya qilinmagan / noto'g'ri SiteID / mobil modul o'chiq | Registratsiyani tekshiring (§7); `/frontend/mobile/*`ни 404 uchun zondlang |
-| `/upload` uriladi lekin **400** | `pkcs7_b64` o'rniga `pkcs7` o'qilyapti | `pkcs7_b64` o'qing (§5.3); `getParameterMap().keySet()`ni log qiling |
-| `/upload` 200 lekin verify **FAILED** | form-urlencoded'да base64 `+` bo'sh joyga aylanган; yoki noto'g'ri hujjat baytlari | `pkcs7.replace(' ', '+')`; aynan bir xil baytlarни hashlang/verify qiling |
-| `documentId` g'alati (uzun UUID) | Siz uni o'zingiz yasayapsiz (stub/placeholder), `/frontend/mobile/sign` chaqirmasdan | Haqiqiy ajratgichni ishlating; haqiqiy id qisqa (masalan `8572EE3E`) |
-| Web plagin topilmadi | E-IMZO plagini o'rnatilmagan / `CAPIWS` bloklangan | Foydalanuvchini E-IMZO o'rnatishga yo'naltiring; `wss://127.0.0.1:64322` handshake'ni tekshiring |
+| Imzo **hech qachon verify'дан o'tmaydi** | Noto'g'ri hash algoritmi (SHA-256, yoki GOST'ning *test* to'plami) | O'z DSt 1106 = CryptoPro GOST R 34.11-94 ishlating; [3.2](#32-har-qanday-implementatsiyani-shu-vektorlar-bilan-tekshiring) vektorlari bilan tekshiring |
+| Faqat ba'zi hujjatlar verify bo'lmaydi | Xom baytlar o'rniga **base64 string** hashlangan | Hujjatning xom baytlarini hashlang |
+| Mobile session **mangu PENDING**, log'да `/upload` yo'q | Callback URL registratsiya qilinmagan / noto'g'ri SiteID / mobile moduli o'chiq | Registratsiyani tekshiring ([8-bo'lim](#8-siteid-va-callback-url-registratsiyasi)); `/frontend/mobile/*` ni `404` uchun `curl` qiling |
+| `/upload` ga so'rov keladi, lekin **400** qaytadi | `pkcs7_b64` o'rniga `pkcs7` field o'qilyapti | `pkcs7_b64` o'qing (6.3); `getParameterMap().keySet()` ni log qiling |
+| `/upload` `200` qaytaradi, lekin verify **FAILED** | `application/x-www-form-urlencoded`да base64 ичидаги `+` belgisi bo'sh joyга aylanган; yoki noto'g'ri hujjat baytlari | `pkcs7.replace(' ', '+')`; imzolash va verify aynan bir xil baytlar ustidan bo'lsin |
+| `documentId` g'alati ko'rinadi (uzun UUID) | Siz uni o'zingiz yasayapsiz (stub/placeholder), `/frontend/mobile/sign` ni chaqirmasdan | Haqiqiy allocator'ни ishlating; haqiqiy id qisqa bo'ladi (masalan `A1B2C3D4`) |
+| Web'da plugin topilmadi | E-IMZO plugin'i o'rnatilmagan / `CAPIWS` bloklangan | Foydalanuvchini E-IMZO'ni o'rnatishga yo'naltiring; `wss://127.0.0.1:64322` bilan bog'lanishni tekshiring |
 
-**Oltin diagnostika harakati:** birinchi haqiqiy callback'да **butun payload shaklini log qiling** (content type + barcha param kalitlari + uzunliklar). E-IMZO'ning haqiqiy maydon nomlari — haqiqat manbai; hujjatlar realdan orqada qoladi.
-
----
-
-## 9. Namuna implementatsiyalar va havolalar
-
-- **`qo0p/e-imzo-doc`** — integratsiya spesifikatsiyasi (ketma-ketlik diagrammalari, endpoint ro'yxati).
-- **`jafar260698/E-IMZO-INTEGRATION`** — Flutter/Dart client. `lib/crypto/`ni ko'chiring (`gost_hash.dart`, `ozdst/ozdst_1106_digest.dart`, `gost/gost_28147_engine.dart`, `hex.dart`, `crc32.dart`) — ishlaydigan, to'g'ri O'z DSt 1106 + deep-link quruvchi.
-- **`jafar260698/E-IMZO-ANDROID`**, **`.../DeepLink-E-IMZO`** — Android/Java deep-link namunalari.
-- **`e-imzo-mobile.js`** (E-IMZO demo) — web deep-link + `gosthash`.
-- **`e-imzoapi.js` / `e-imzo-client.js`** — web oqim uchun brauzer-plagin (`CAPIWS`) API'si.
-- **BouncyCastle** `org.bouncycastle:bcprov-jdk18on` — backend uchun `GOST3411Digest` (default = O'z DSt 1106).
+**Eng foydali diagnostika usuli:** birinchi haqiqiy callback kelganда butun so'rovni (content type + barcha field nomlari + uzunliklari) log qiling. E-IMZO'ning haqiqiy field nomlari — asosiy haqiqat manbai; hujjatlar realдан ba'zan orqada qoladi.
 
 ---
 
-## 10. Checklist'lar
+## 10. Manba kodlar va havolalar
 
-**Web**
-- [ ] E-IMZO plagini `CAPIWS` orqali aniqlandi
-- [ ] Kalitlar ro'yxati → foydalanuvchi tanlaydi → PKCS#7 yaraladi (plagin hashlaydi + imzolaydi)
-- [ ] PKCS#7 (detached bo'lsa hujjat bilan) backend'ga POST qilinadi
-- [ ] Backend `verify/detached` + PINFL darvozasi + saqlash
-
-**Mobil**
-- [ ] Backend sessiya ochadi: haqiqiy `documentId` (qisqa) + O'z DSt 1106 `hashHex`
-- [ ] Ilova `eimzo://sign?qc=<siteId><documentId><hashHex><crc32>` quradi; ochadi
-- [ ] SiteID callback URL E-IMZO'ga registratsiya qilingan (ochiq HTTPS)
-- [ ] Callback handler `pkcs7_b64` + `document_id` o'qiydi (form-urlencoded)
-- [ ] `verify/detached` + PINFL darvozasi + saqlash; ilova SIGNED'gacha so'raydi
-
-**Backend**
-- [ ] O'z DSt 1106 = BouncyCastle default `GOST3411Digest`; §2.2 vektorlari bilan unit-test qilingan
-- [ ] Verify yo'li web + mobil uchun umumiy
-- [ ] Callback `permitAll`; xavfsizlik = kripto verify + PINFL + taxmin qilib bo'lmaydigan id
-- [ ] Evidence/audit uchun foydalanuvchi yuborgan hech qanday maydonga ishonilmaydi
+- [**qo0p/e-imzo-doc**](https://github.com/qo0p/e-imzo-doc) — integratsiya spetsifikatsiyasi (ketma-ketlik diagrammalari, endpoint'lar ro'yxati). Boshlash uchun eng yaxshi joy.
+- [**jafar260698/E-IMZO-INTEGRATION**](https://github.com/jafar260698/E-IMZO-INTEGRATION) — Flutter/Dart uchun client. [`lib/crypto/`](https://github.com/jafar260698/E-IMZO-INTEGRATION/tree/dev/lib/crypto) papkasini ko'chiring: `gost_hash.dart`, `ozdst/ozdst_1106_digest.dart`, `gost/gost_28147_engine.dart`, `hex.dart`, `crc32.dart` — ishlaydigan, to'g'ri O'z DSt 1106 va deep-link quruvchi.
+- [**jafar260698/E-IMZO-ANDROID**](https://github.com/jafar260698/E-IMZO-ANDROID) va [**DeepLink-E-IMZO**](https://github.com/jafar260698/DeepLink-E-IMZO) — Android/Java uchun deep-link namunalari.
+- [**e-imzo-mobile.js**](https://test.e-imzo.uz/demo/eimzoidcard/js/e-imzo-mobile.js) — E-IMZO'ning web demosi (deep-link + `gosthash`).
+- [**BouncyCastle**](https://www.bouncycastle.org/download/bouncy-castle-java/) (`org.bouncycastle:bcprov-jdk18on`) — backend uchun `GOST3411Digest` (default = O'z DSt 1106).
+- [**E-IMZO rasmiy sayti**](https://e-imzo.uz) — plugin, hujjatlar, shartnoma masalalari.
 
 ---
 
-*Haqiqiy prod E-IMZO integratsiyasidan (web + mobil + backend) qurildi va jonli ishlab turibdi. Agar bu yerdagi maydon nomi yoki endpoint sizning jonli E-IMZO'ingizga zid kelsa — jonli callback'ga ishoning va bu qo'llanmani yangilang: E-IMZO'ning haqiqiy xatti-harakati haqiqat manbaidir.*
+*Bu qo'llanma haqiqiy, production'да ishlab turgan E-IMZO integratsiyasidan (web + mobile + backend) yozildi. Agar bu yerdagi biror field nomi yoki endpoint sizning jonli E-IMZO'ingizga to'g'ri kelmasa — jonli callback'ga ishoning va bu hujjatni yangilang: E-IMZO'ning real xatti-harakati eng ishonchli manba.*
